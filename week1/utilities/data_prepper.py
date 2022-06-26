@@ -6,6 +6,7 @@ import pandas as pd
 import query_utils as qu
 from opensearchpy import RequestError
 import os
+from collections import defaultdict
 
 # from importlib import reload
 
@@ -234,20 +235,55 @@ class DataPrepper:
         # IMPLEMENT_START --
         print("IMPLEMENT ME: __log_ltr_query_features: Extract log features out of the LTR:EXT response and place in a data frame")
         # Loop over the hits structure returned by running `log_query` and then extract out the features from the response per query_id and doc id.  Also capture and return all query/doc pairs that didn't return features
-        # Your structure should look like the data frame below
-        feature_results = {}
-        feature_results["doc_id"] = []  # capture the doc id so we can join later
-        feature_results["query_id"] = []  # ^^^
-        feature_results["sku"] = []
-        feature_results["name_match"] = []
-        rng = np.random.default_rng(12345)
+
+        # Run the query just like any other search
+        response = self.opensearch.search(body=log_query, index=self.index_name)
+
+        hits = response['hits']['hits']
+        hits_4_doc_id = {}
+        for hit in hits:
+            hits_4_doc_id[int(hit['_id'])] = hit
+        
+
+        # print("HITS:", hits)
+        # there should only be one hit
+
+        feature_results = []
         for doc_id in query_doc_ids:
-            feature_results["doc_id"].append(doc_id)  # capture the doc id so we can join later
-            feature_results["query_id"].append(query_id)
-            feature_results["sku"].append(doc_id)  
-            feature_results["name_match"].append(rng.random())
-        frame = pd.DataFrame(feature_results)
+            feature_result = {
+                "doc_id": doc_id,
+                "query_id": query_id,
+                "sku": doc_id
+            }
+            if doc_id in hits_4_doc_id.keys():
+                for log_entry in hits_4_doc_id[doc_id]['fields']['_ltrlog'][0]['log_entry']:
+                    if 'value' in log_entry.keys():
+                        feature_result[log_entry['name']] = log_entry['value']
+                    else:
+                        feature_result[log_entry['name']] = 0
+
+            feature_results.append(feature_result)
+        
+        #collect all featurname came fro diff docs
+        feature_names = set()
+        for each_doc_feat in feature_results:
+            feature_names |= set(each_doc_feat.keys())
+
+        for (index,each_doc_feat) in enumerate(feature_results):
+            for each_name in feature_names:
+                if each_name not in each_doc_feat.keys():
+                    feature_results[index][each_name] = 0
+
+        df_ft_results = defaultdict(list)
+        for each_doc_feat in feature_results:
+            for k, value in each_doc_feat.items():
+                df_ft_results[k].append(value)
+
+        frame = pd.DataFrame(df_ft_results)
         return frame.astype({'doc_id': 'int64', 'query_id': 'int64', 'sku': 'int64'})
+
+
+
         # IMPLEMENT_END
 
     # Can try out normalizing data, but for XGb, you really don't have to since it is just finding splits

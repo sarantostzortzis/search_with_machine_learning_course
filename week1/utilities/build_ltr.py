@@ -303,6 +303,8 @@ if __name__ == "__main__":
                     # Aggregations here returns the stats about our features, like min/max, std dev.  If we ever use
                     # https://elasticsearch-learning-to-rank.readthedocs.io/en/latest/training-models.html#creating-a-model-with-feature-normalization
                     # we will need these to be saved/looked up so that we can add the normalizers to the model
+                    print("THE FEATURE SET", the_feature_set)
+                    
                     (features_df, aggregations) = data_prepper.normalize_data(features_df, the_feature_set,
                                                                               normalize_type_map)
                     # Write out the normalized DF
